@@ -361,14 +361,20 @@ async def get_demo_page():
 
 # ── Prometheus Metrics (#40) ──────────────────────────────────────────────────
 try:
-    from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
+    from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST, REGISTRY
     from fastapi.responses import Response as _Resp
 
-    _voice_calls_total   = Counter("voice_calls_total",   "Total calls handled by the agent")
-    _voice_calls_booked  = Counter("voice_calls_booked_total", "Calls that resulted in a booking")
-    _voice_call_duration = Histogram("voice_call_duration_seconds", "Call duration in seconds",
+    def _get_or_create(cls, name, *args, **kwargs):
+        """Return existing collector or create a new one (safe for Uvicorn reload)."""
+        if name in REGISTRY._names_to_collectors:
+            return REGISTRY._names_to_collectors[name]
+        return cls(name, *args, **kwargs)
+
+    _voice_calls_total   = _get_or_create(Counter, "voice_calls_total",   "Total calls handled by the agent")
+    _voice_calls_booked  = _get_or_create(Counter, "voice_calls_booked_total", "Calls that resulted in a booking")
+    _voice_call_duration = _get_or_create(Histogram, "voice_call_duration_seconds", "Call duration in seconds",
                                       buckets=[10, 30, 60, 120, 300, 600, 1200])
-    _voice_calls_active  = Gauge("voice_calls_active", "Currently active calls")
+    _voice_calls_active  = _get_or_create(Gauge, "voice_calls_active", "Currently active calls")
 
     @app.get("/metrics", include_in_schema=False)
     def metrics():
